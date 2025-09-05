@@ -1,0 +1,87 @@
+Estrazione Java Oracle installata sulle macchine Win
+
+Script estrazione versioni
+
+# Lista dei server
+$servers = @(
+'scapmot0589'
+)
+
+# Script da eseguire remotamente
+$scriptBlock = {
+    $output = @()
+
+    $registryPaths = @(
+        "HKLM:\SOFTWARE\JavaSoft\Java Runtime Environment",
+        "HKLM:\SOFTWARE\JavaSoft\Java Development Kit",
+        "HKLM:\SOFTWARE\WOW6432Node\JavaSoft\Java Runtime Environment",
+        "HKLM:\SOFTWARE\WOW6432Node\JavaSoft\Java Development Kit"
+    )
+
+    foreach ($path in $registryPaths) {
+        if (Test-Path $path) {
+            try {
+                Get-ChildItem -Path $path | ForEach-Object {
+                    $version = $_.PSChildName
+                    $javaHome = (Get-ItemProperty "$path\$version" -ErrorAction SilentlyContinue).JavaHome
+                    if ($javaHome) {
+                        $output += "| Registro: Versione = $version | Path = $javaHome"
+                    }
+                }
+            } catch {
+                $output += "Errore durante la lettura del registro: $path"
+            }
+        }
+    }
+
+    if ($output.Count -gt 0) {
+        Write-Host "=== VERSIONI DI JAVA TROVATE NEL REGISTRO ===" -ForegroundColor Cyan
+        $output | ForEach-Object { Write-Host $_ }
+    }
+
+    $fsOutput = @()
+    $folders = @("C:\Program Files\Java", "C:\Program Files (x86)\Java")
+    foreach ($folder in $folders) {
+        if (Test-Path $folder) {
+            Get-ChildItem -Path $folder -Directory | ForEach-Object {
+                $fsOutput += "| Cartella trovata: $($_.FullName)"
+            }
+        }
+    }
+
+    if ($fsOutput.Count -gt 0) {
+        Write-Host "`n=== INSTALLAZIONI JAVA NEL FILESYSTEM ===" -ForegroundColor Cyan
+        $fsOutput | ForEach-Object { Write-Host $_ }
+    }
+
+    $javaLocation = $null
+    $javaVersion = $null
+    try {
+        $javaVersion = & java -version 2>&1
+        $javaLocation = (Get-Command java -ErrorAction SilentlyContinue).Source
+    } catch {}
+
+    if ($javaLocation) {
+        Write-Host "`n=== JAVA NEL PATH DI SISTEMA ===" -ForegroundColor Cyan
+        Write-Host "| Eseguibile: $javaLocation"
+        Write-Host "| Versione:"
+        $javaVersion | ForEach-Object { Write-Host "`t$_" }
+    }
+
+    try {
+        $javaPaths = & where java 2>$null
+        if ($javaPaths) {
+            Write-Host "`n=== TUTTE LE VERSIONI TROVATE CON 'where java' ===" -ForegroundColor Cyan
+            foreach ($path in $javaPaths) {
+                Write-Host "`n| Eseguibile: $path"
+                & "$path" -version 2>&1 | ForEach-Object { Write-Host "`t$_" }
+            }
+        }
+    } catch {}
+}
+
+# Esecuzione remota
+foreach ($server in $servers) {
+    Write-Host "___________________________________________________________________`n===> Verifica su $server <===" -ForegroundColor Yellow
+    Invoke-Command -ComputerName $server -ScriptBlock $scriptBlock
+}
